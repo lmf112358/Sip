@@ -1,0 +1,20 @@
+小满 · Sip
+Copyright 2026 李名沨 (Li Mingfeng)
+
+This product is derived from the open-source project Shui:
+
+  Shui — 喝水提醒助手
+  https://github.com/rock-zhang/Shui
+  Copyright 2025 rock-zhang
+  Licensed under the Apache License, Version 2.0
+
+Derivative work notes:
+
+  - The frontend (React 19 + Vite multi-entry UI) was rewritten from scratch;
+    the original Next.js frontend code is not included.
+  - The Rust scheduler / SQLite storage / window management were redesigned
+    around multi-task timing, quiet hours and reminder profiles. The approach
+    for the tray icon, multi-monitor fullscreen windows and idle/lock detection
+    takes inspiration from Shui's implementation.
+  - Bitmap icons under src-tauri/icons/ were regenerated from SVG sources
+    (src-tauri/icon-source.svg, src-tauri/tray-source.svg).

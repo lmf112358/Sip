@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark" data-accent="ocean">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小满 Sip</title>
+    <script>
+      (function () {
+        try {
+          var p = JSON.parse(localStorage.getItem("sip.appearance") || localStorage.getItem("ticker.appearance") || "{}");
+          var sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var dark =
+            p.theme === "dark" || ((!p.theme || p.theme === "system") && sysDark);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+          if (p.accent) document.documentElement.dataset.accent = p.accent;
+          if (p.scale) document.documentElement.style.setProperty("--scale", String(p.scale));
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0f14; }
+      html[data-theme="light"], html[data-theme="light"] body { background: #f5f7fa; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/entries/main-entry.tsx"></script>
+  </body>
+</html>

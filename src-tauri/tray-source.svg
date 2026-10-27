@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="d" x1="0.25" y1="0.05" x2="0.75" y2="1">
+      <stop offset="0" stop-color="#7DD3FC"/>
+      <stop offset="0.5" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+  </defs>
+  <!-- 托盘用：透明底 + 实心水滴，32px 下仍可辨识 -->
+  <path d="M256 40
+           C 366 176, 432 248, 432 328
+           a 176 176 0 0 1 -352 0
+           C 80 248, 146 176, 256 40 Z"
+        fill="url(#d)"/>
+  <ellipse cx="196" cy="292" rx="40" ry="56" fill="#FFFFFF" fill-opacity="0.55" transform="rotate(-20 196 292)"/>
+</svg>

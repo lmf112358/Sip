@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+/* ============ 主题 token ============ */
+:root[data-theme="dark"] {
+  --bg: #0b0f14;
+  --surface: #131a22;
+  --surface-2: #1b242e;
+  --surface-3: #232e3a;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #edf2f7;
+  --text-dim: #8c9aab;
+  --text-mute: #64748b;
+  --water: #38bdf8;
+  --eyes: #34d399;
+  --kegel: #a78bfa;
+  --break: #fbbf24;
+  --danger: #f87171;
+  --on-task: #05121b;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #eef2f7;
+  --surface-3: #e3e9f1;
+  --border: rgba(15, 23, 42, 0.09);
+  --border-strong: rgba(15, 23, 42, 0.16);
+  --text: #0f172a;
+  --text-dim: #55657a;
+  --text-mute: #8595a8;
+  --water: #0284c7;
+  --eyes: #059669;
+  --kegel: #7c3aed;
+  --break: #d97706;
+  --danger: #dc2626;
+  --on-task: #ffffff;
+  --shadow: 0 8px 30px rgba(15, 23, 42, 0.1);
+  color-scheme: light;
+}
+
+:root[data-accent="ocean"] {
+  --accent: #38bdf8;
+  --accent-soft: rgba(56, 189, 248, 0.14);
+}
+:root[data-accent="violet"] {
+  --accent: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.14);
+}
+:root[data-accent="emerald"] {
+  --accent: #34d399;
+  --accent-soft: rgba(52, 211, 153, 0.14);
+}
+:root[data-accent="amber"] {
+  --accent: #fbbf24;
+  --accent-soft: rgba(251, 191, 36, 0.14);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text);
+  --color-fg-dim: var(--text-dim);
+  --color-fg-mute: var(--text-mute);
+  --color-water: var(--water);
+  --color-eyes: var(--eyes);
+  --color-kegel: var(--kegel);
+  --color-break: var(--break);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+}
+
+/* ============ 基础 ============ */
+html {
+  font-size: calc(16px * var(--scale, 1));
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ============ 复用样式 ============ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 20px);
+}
+
+.btn-primary {
+  background: var(--task-color, var(--accent));
+  color: var(--on-task);
+  border-radius: 14px;
+  font-weight: 500;
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.18s;
+}
+.btn-primary:hover {
+  filter: brightness(1.06);
+}
+.btn-primary:active {
+  transform: scale(0.985);
+}
+
+.btn-ghost {
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  color: var(--text-dim);
+  transition: 0.18s;
+}
+.btn-ghost:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.24s ease both;
+}
+
+/* v1.3：记录行删除按钮 hover 才出现 */
+.rec-row .rec-del {
+  transition: opacity 140ms;
+}
+.rec-row:hover .rec-del {
+  opacity: 1 !important;
+}
+.rec-row:hover {
+  background: var(--surface-2);
+}
+.task-row:hover {
+  border-color: var(--border-strong);
+}

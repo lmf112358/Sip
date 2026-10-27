@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Sip",
+  "version": "1.4.0",
+  "identifier": "com.sip.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "小满 Sip",
+        "url": "index.html",
+        "width": 1080,
+        "height": 720,
+        "minWidth": 940,
+        "minHeight": 640,
+        "decorations": false,
+        "transparent": false,
+        "resizable": true,
+        "visible": true,
+        "center": true,
+        "backgroundColor": "#0B0F14",
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**", "$APPLOCALDATA/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon_32x32.png",
+      "icons/icon_128x128.png",
+      "icons/icon_256x256.png",
+      "icons/icon_512x512.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": ["icons/**/*"],
+    "shortDescription": "小满 Sip · 久坐自救提醒（喝水 / 眼保健操 / 提肛 / 摸鱼）",
+    "longDescription": "小满 Sip 是一个多任务定时提醒工具，支持喝水、眼保健操、提肛运动、摸鱼休息四类任务的独立计时与独立统计，提供全屏提醒、伪装消息窗、系统通知三种提醒形态，以及一键会议免打扰模式。",
+    "windows": {
+      "nsis": {
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

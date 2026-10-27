@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>消息</title>
+    <script>
+      (function () {
+        try {
+          var p = JSON.parse(localStorage.getItem("sip.appearance") || localStorage.getItem("ticker.appearance") || "{}");
+          var sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var dark =
+            p.theme === "dark" || ((!p.theme || p.theme === "system") && sysDark);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      html,
+      body,
+      #root {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/entries/toast-entry.tsx"></script>
+  </body>
+</html>

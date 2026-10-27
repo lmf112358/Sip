@@ -1,0 +1,29 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# 本地数据库 / 导出
+*.db
+*.db-wal
+*.db-shm
+*.csv
+
+# 环境变量
+.env
+.env.*
+!.env.example
+
+# 日志
+*.log
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
