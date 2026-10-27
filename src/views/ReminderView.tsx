@@ -64,9 +64,34 @@ export function ReminderView() {
   }, []);
 
   useEffect(() => {
+    void api.diag(
+      `reminder mount task=[${taskId}] preview=${isPreview} search=[${location.search}]`
+    );
     if (isPreview || !taskId) return;
-    api.getRemindPayload(taskId).then((p) => setPayload(p ?? null));
+    api
+      .getRemindPayload(taskId)
+      .then((p) => {
+        void api.diag(`reminder payload ${p ? `${p.type}/${p.style}` : "null"}`);
+        setPayload(p ?? null);
+      })
+      .catch((e) => {
+        void api.diag(`reminder payload error ${String(e)}`);
+        setPayload(null);
+      });
   }, [taskId]);
+
+  // 拿不到数据就把窗口关掉，别把用户晾在一个没内容的黑屏上
+  useEffect(() => {
+    if (isPreview) return;
+    const id = window.setTimeout(() => {
+      if (!payload) {
+        void api.diag("reminder payload timeout，自动关闭");
+        void closeSelf();
+      }
+    }, 6000);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload]);
 
   useEffect(() => {
     if (!isTauri() || isPreview) return;
@@ -84,17 +109,23 @@ export function ReminderView() {
 
   useEffect(() => {
     if (!payload) return;
-    setLeft(duration > 0 ? duration : autoClose);
+    const start = duration > 0 ? duration : autoClose;
+    void api.diag(`reminder timer dur=${duration} auto=${autoClose} start=${start}`);
+    setLeft(start);
     setArmed(true);
   }, [payload, duration, autoClose]);
 
   useEffect(() => {
     if (!payload || !armed || left <= 0) return;
-    const id = window.setTimeout(() => setLeft((v) => v - 1), 1000);
+    const id = window.setTimeout(() => {
+      if (left % 5 === 0) void api.diag(`reminder tick left=${left}`);
+      setLeft((v) => v - 1);
+    }, 1000);
     return () => window.clearTimeout(id);
   }, [left, payload, armed]);
 
   const closeSelf = async () => {
+    void api.diag(`reminder close preview=${isPreview}`);
     setClosing(true);
     await new Promise((r) => setTimeout(r, 200));
     if (!isTauri()) {
@@ -209,10 +240,12 @@ function ReminderBody({
 
   return (
     <div
+      onClick={onClose}
       style={{
         position: "fixed",
         inset: 0,
         background: bgUrl ? "#000" : gradient,
+        cursor: "pointer",
         opacity: closing ? 0 : 1,
         transition: "opacity 200ms ease",
         overflow: "hidden",
@@ -367,7 +400,7 @@ function ReminderBody({
             </button>
           ) : null}
           <button onClick={onClose} style={{ fontSize: 12.5, color: "rgba(255,255,255,.55)" }}>
-            Esc
+            {t("common.close")} · Esc
           </button>
         </div>
       </div>

@@ -159,6 +159,8 @@ export const zh = {
   "settings.data": "数据",
   "settings.export": "导出全部记录（CSV）",
   "settings.openDir": "打开数据目录",
+  "settings.quit": "退出小满",
+  "settings.quitConfirm": "退出后提醒会停止，确定退出吗？",
   "settings.about": "关于",
   "settings.version": "版本",
   "settings.meetingDefault": "会议模式默认时长",

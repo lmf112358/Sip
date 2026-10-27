@@ -16,6 +16,25 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, WindowEvent};
 
 static RUST_LOG_READY: AtomicBool = AtomicBool::new(false);
+/// 「关闭时最小化到托盘」。用原子量而不是读 ENGINE：
+/// on_window_event 跑在主线程，若此时调度线程正持锁（它在里面还要往主线程派发托盘/窗口任务），
+/// 双方互等就是死锁 —— 表现正是「窗口关不掉、退出也退不掉、界面卡住」。
+pub static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(true);
+
+/// 真正的退出：先销毁所有窗口（含可能卡住的 WebView），再走正常退出；
+/// 2 秒后仍未退出就强杀进程 —— 退出必须退得掉，这是底线。
+pub fn request_quit(app: &AppHandle) {
+    println!("[sip] 退出中…");
+    windows::destroy_all(app);
+    app.exit(0);
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        eprintln!("[sip] 正常退出超时，强制结束进程");
+        let _ = &handle;
+        std::process::exit(0);
+    });
+}
 
 fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let (lang, has_session) = {
@@ -119,7 +138,7 @@ fn on_menu(app: &AppHandle, id: &str) {
             scheduler::start_session(app, "focus", 30);
         }
         "show" => windows::show_main(app),
-        "quit" => app.exit(0),
+        "quit" => crate::request_quit(app),
         "quick:water" | "quick:eyes" => {
             let kind = if id == "quick:water" { T_WATER } else { T_EYES };
             let db = app.state::<Db>();
@@ -170,6 +189,50 @@ fn register_shortcuts(app: &AppHandle) {
     if let Err(e) = res2 {
         eprintln!("[shortcut] Ctrl+Shift+H 注册失败: {e}");
     }
+
+    // 逃生键：万一提醒窗的网页没渲染出来（白屏/黑屏），Esc 就没机会响应，
+    // 这里给一个系统级兜底，随手把提醒关掉。
+    let x = Shortcut::new(Some(mods), Code::KeyX);
+    let res3 = app.global_shortcut().on_shortcut(x, |app, _sc, event| {
+        if event.state() != ShortcutState::Pressed {
+            return;
+        }
+        windows::destroy_reminders(app);
+        windows::destroy_toasts(app);
+        ENGINE.lock().pending = None;
+        eprintln!("[shortcut] 已强制关闭所有提醒");
+    });
+    if let Err(e) = res3 {
+        eprintln!("[shortcut] Ctrl+Shift+X 注册失败: {e}");
+    }
+}
+
+/// 主线程看门狗：每 2 秒测一次「往主线程派发任务再回来」的耗时。
+/// 这个数字突然飙到秒级，就说明主线程被卡住（窗口操作、WebView 合成、死锁都会这样），
+/// 日志里能直接看到，不用再靠猜。
+fn start_watchdog(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let t0 = std::time::Instant::now();
+        let (tx, rx) = std::sync::mpsc::channel();
+        if app
+            .run_on_main_thread(move || {
+                let _ = tx.send(());
+            })
+            .is_err()
+        {
+            return;
+        }
+        match rx.recv_timeout(std::time::Duration::from_secs(5)) {
+            Ok(()) => {
+                let ms = t0.elapsed().as_millis();
+                if ms >= 500 {
+                    eprintln!("[watchdog] 主线程响应耗时 {ms}ms");
+                }
+            }
+            Err(_) => eprintln!("[watchdog] 主线程 5 秒无响应，疑似卡死"),
+        }
+    });
 }
 
 pub fn run() {
@@ -190,9 +253,27 @@ pub fn run() {
             app.manage(db);
 
             scheduler::boot(&handle);
+            CLOSE_TO_TRAY.store(
+                ENGINE.lock().settings.close_to_tray,
+                Ordering::Relaxed,
+            );
             rebuild_tray(&handle)?;
             register_shortcuts(&handle);
             scheduler::start_loop(handle.clone());
+
+            start_watchdog(handle.clone());
+
+            // 测试钩子：SIP_QUIT_AFTER_SEC=5 时 5 秒后走正常退出流程（用来验证「退出到底退不退得掉」）
+            if let Ok(v) = std::env::var("SIP_QUIT_AFTER_SEC") {
+                if let Ok(sec) = v.parse::<u64>() {
+                    let h = handle.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_secs(sec));
+                        eprintln!("[sip] 测试钩子触发退出");
+                        crate::request_quit(&h);
+                    });
+                }
+            }
 
             RUST_LOG_READY.store(true, Ordering::SeqCst);
             println!("[sip] 启动完成");
@@ -201,12 +282,11 @@ pub fn run() {
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 if let WindowEvent::CloseRequested { api, .. } = event {
-                    let close_to_tray = ENGINE.lock().settings.close_to_tray;
-                    if close_to_tray {
+                    if CLOSE_TO_TRAY.load(Ordering::Relaxed) {
                         api.prevent_close();
                         let _ = window.hide();
                     } else {
-                        let _ = window.app_handle().exit(0);
+                        crate::request_quit(window.app_handle());
                     }
                 }
             }
@@ -239,6 +319,7 @@ pub fn run() {
             commands::show_main,
             commands::hide_main,
             commands::sync_language,
+            commands::diag,
             commands::quit
         ])
         .run(tauri::generate_context!())

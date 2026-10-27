@@ -44,6 +44,11 @@ pub fn screen_locked() -> bool {
     use windows_sys::Win32::System::StationsAndDesktops::{
         CloseDesktop, OpenInputDesktop, DESKTOP_READOBJECTS, DESKTOP_SWITCHDESKTOP,
     };
+    // 排查用：某些环境（远程桌面、切换用户、安全桌面）下 OpenInputDesktop 会一直失败，
+    // 导致调度器误以为一直锁屏、所有提醒都不弹。设 SIP_IGNORE_LOCK=1 可绕过。
+    if std::env::var_os("SIP_IGNORE_LOCK").is_some() {
+        return false;
+    }
     unsafe {
         let h = OpenInputDesktop(0, 0, DESKTOP_READOBJECTS | DESKTOP_SWITCHDESKTOP);
         if h.is_null() {

@@ -1,7 +1,7 @@
 # 小满 · Sip
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.4.0-2ea44f">
+  <img alt="version" src="https://img.shields.io/badge/version-1.4.2-2ea44f">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20%C2%B7%20macOS%2012%2B-blue">
   <img alt="tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB">
   <img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-green">
@@ -119,7 +119,48 @@ npm run tauri build
 | --- | --- |
 | `Ctrl/Cmd + Shift + M` | 开关会议模式 |
 | `Ctrl/Cmd + Shift + H` | 唤起主窗口 |
+| `Ctrl/Cmd + Shift + X` | 强制关闭当前提醒（逃生键，任何时候都能用） |
 | `Esc` / `Enter` | 全屏提醒中关闭 / 确认完成 |
+| 鼠标左键 | 全屏提醒中点击任意位置关闭 |
+
+## 已修复的问题（v1.4.2）
+
+这一版集中修了「全屏提醒卡、部分任务不提醒 / 互相打架、窗口关不掉 / 退不掉」三组问题：
+
+| 症状 | 根因 | 修法 |
+| --- | --- | --- |
+| **打包后的程序提醒页是空屏，倒计时不跑也不自动关** | `Cargo.toml` 缺 `custom-protocol` 特性，`WebviewUrl::App` 被解析成 `http://localhost:1420`（Vite 开发服务器）。装到没有 dev server 的机器上，提醒页永远加载不出来 —— 于是「卡住 + 其它提醒全被压住」 | 补上 `custom-protocol = ["tauri/custom-protocol"]`；统一用 `npm run tauri:build` 出包。日志里 `[window] 提醒窗 … url=http://tauri.localhost/…` 才是对的 |
+| 全屏提醒卡顿 | 提醒窗用了 `transparent(true)`，整屏透明分层窗口在 Windows 上走软件合成，每帧都贵 | 改成不透明窗 + 深色底；消息窗只有 404×152 才保留透明 |
+| 提醒窗关掉后仍占资源 | 关闭时调的是 `hide()`，WebView 被藏起来但每秒倒计时和动画还在跑 | 全部改为 `destroy()`，用完即销 |
+| 只有第一个任务会提醒，其它任务等不到 | ①`pending` 在窗口还没建好时就写进去了，下一秒被误判「窗口已消失」；②回收超时只按提醒配置算，眼睛（120s）、远眺（300s）这种任务的动作时长被忽略 | `pending` 改为**建窗成功后**再登记；上限取 `max(提醒配置, 任务动作时长, 自动关闭秒数) + 40s` |
+| 眼保健操还开着，喝水又盖上来 | 出队时给了 60 秒宽限，上一个没关也能弹下一个 | 改成严格的单提醒串行：`pending` 有人就绝不弹第二个；关掉后留 3 秒静默期 |
+| 连续弹出两个提醒 | 销毁是异步派发，紧接着建同名窗口会撞 `already exists` | 建窗前轮询等待旧窗消失（≤600ms） |
+| 界面卡住 / 关不掉 / 退不掉 | `on_window_event`（主线程）里抢 `ENGINE` 锁，与调度线程互等死锁；且前端根本没有「退出」入口，只能靠托盘 | 改为原子变量；退出先销毁所有窗口再 `exit(0)`，2 秒没退干净强制结束进程；设置页新增「退出小满」按钮 |
+| 某些机器一直不提醒 | 锁屏检测单次失败就判定锁屏，把所有提醒冻结 | 连续 3 秒才判锁屏；可用 `SIP_IGNORE_LOCK=1` 绕过排查 |
+| 全屏提醒关不掉（无按钮可用） | 窗口 `closable(false)`，页面数据没到位时只剩背景 | `Esc`、点击任意位置、`Alt+F4`、`Ctrl/Cmd+Shift+X` 四种方式都能关 |
+| 提醒一闪就记录完成 | 倒计时初值 0 与「归零即完成」的 effect 同批执行 | 加 `armed` 标志，倒计时初始化后才允许触发归零逻辑 |
+
+## 排查手段
+
+程序把关键状态都写进标准错误日志，出问题先看日志：
+
+```bash
+# Windows：从命令行启动即可看到日志
+sip.exe
+```
+
+| 日志 | 含义 |
+| --- | --- |
+| `[sip] 诊断 locked=… whitelist_hit=…` | 启动时的锁屏 / 前台白名单判定 |
+| `[scheduler] 弹出提醒 <id> type=… style=…` | 这一次该弹谁、用什么形态 |
+| `[window] 全屏提醒已显示 reminder_0 … 用时…ms` | 窗口建成功及耗时（>500ms 就要留意） |
+| `[window] 提醒窗 reminder_0 1.5s 后 url=…` | **页面是否真的加载了**。`url=http://tauri.localhost/…` 才是正常；出现 `localhost:1420` 或一直是 `about:blank` 就是打包特性没开对 |
+| `[scheduler] pending 回收 pid=… reason=窗口已消失/超时` | 自愈生效，回收了残留窗口 |
+| `[scheduler] 暂停状态 -> locked/quiet/whitelist/session` | 为什么没提醒 |
+| `[watchdog] 主线程响应耗时 …ms` | 主线程被卡住（= 会表现为界面卡顿） |
+| `[ui] …` | 提醒页/消息窗自己的状态（挂载、拿到数据、倒计时、关闭） |
+
+环境变量（仅排查用）：`SIP_IGNORE_LOCK=1` 忽略锁屏判定；`SIP_QUIT_AFTER_SEC=N` N 秒后自动退出（验证退出是否可靠）。
 
 ## 已知限制
 

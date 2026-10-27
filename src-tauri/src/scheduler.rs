@@ -89,6 +89,15 @@ pub struct Engine {
     pub preview: Option<RemindPayload>,
     /// 上一次的暂停原因，仅用于状态变化时打日志
     pub last_reason: Option<String>,
+    /// 今日记录缓存：每秒 tick 不再查库，只在记录变化或每 5 秒刷新
+    pub records: Vec<RecordRow>,
+    /// tick 计数，用于节流
+    pub tick_n: u64,
+    /// 当前这次提醒允许占屏的秒数（= 停留时长 + 余量），超过就回收
+    pub pending_limit: i64,
+    /// 连续判定为「锁屏」的秒数：OpenInputDesktop 偶尔会瞬时失败，
+    /// 去抖之后才不会因为一次误判就把所有提醒冻结掉
+    pub locked_secs: u8,
 }
 
 impl Engine {
@@ -109,6 +118,10 @@ impl Engine {
             quiet_grace: 60,
             preview: None,
             last_reason: None,
+            records: vec![],
+            tick_n: 0,
+            pending_limit: 90,
+            locked_secs: 0,
         }
     }
 
@@ -169,7 +182,8 @@ impl Engine {
         if self.session.is_some() {
             return Some("session");
         }
-        if platform::screen_locked() {
+        // 连续 3 秒都判为锁屏才算锁屏，避免 OpenInputDesktop 偶发失败把提醒冻住
+        if self.locked_secs >= 3 {
             return Some("locked");
         }
         if !self.settings.whitelist.is_empty() && platform::in_whitelist(&self.settings.whitelist) {
@@ -294,7 +308,7 @@ impl Engine {
             today_water_goal: water_goal,
             quiet_now: quiet_end.is_some(),
             quiet_end,
-            records: vec![],
+            records: self.records.clone(),
         }
     }
 }
@@ -334,6 +348,7 @@ pub fn boot(app: &AppHandle) {
     for rt in &mut e.tasks {
         rt.next_due = Some(now + Duration::minutes(rt.task.interval_min.max(1)));
     }
+    e.records = db.today_records(40);
     drop(e);
     println!(
         "[sip] 诊断 locked={} whitelist_hit={}",
@@ -351,6 +366,7 @@ pub fn snapshot_now(app: &AppHandle) -> Snapshot {
         e.snapshot(reason.as_deref())
     };
     snap.records = db.today_records(40);
+    ENGINE.lock().records = snap.records.clone();
     snap
 }
 
@@ -366,9 +382,19 @@ pub fn start_loop(app: AppHandle) {
         .expect("无法启动调度线程");
 }
 
+/// 待弹出的提醒。`limit` 是这次占屏的时间上限（停留时长 + 余量），
+/// 用于 pending 超时回收。之所以不在这里就把 pending 写进 Engine，
+/// 是因为窗口要到锁外才真正创建 —— 提前写会让下一个 tick 看到
+/// 「pending 有值但窗口不存在」，误判成「提醒已被关掉」。
+struct PendingShow {
+    task: Task,
+    limit: i64,
+}
+
 fn tick(app: &AppHandle) -> Result<(), String> {
     let db = app.state::<Db>();
-    let mut to_show: Vec<Task> = Vec::new();
+    let mut to_show: Vec<PendingShow> = Vec::new();
+    let mut stale_pending = false;
     // 会话提示（会议剩 3 分钟 / 不限时长满 2 小时），出锁后再发通知
     let mut warn: Option<(&'static str, i64)> = None;
     let snapshot: Snapshot;
@@ -391,6 +417,35 @@ fn tick(app: &AppHandle) -> Result<(), String> {
             e.soft_land_until = Some(now + Duration::seconds(e.quiet_grace));
         }
         e.quiet_prev = is_quiet;
+
+        // 0. 锁屏去抖：每秒采样一次，连续 3 秒才认为真的锁屏
+        if platform::screen_locked() {
+            e.locked_secs = (e.locked_secs + 1).min(10);
+        } else {
+            e.locked_secs = 0;
+        }
+
+        // 0.5 pending 自愈：提醒窗已经不在（用户关了 / Alt+F4 / WebView 崩了），
+        //    或者已经挂了太久没动静，就清掉，否则后面所有提醒都会被压住 ——
+        //    表现就是「只有第一个任务会提醒，其它任务永远等不到」。
+        if let Some((pid, at)) = e.pending.as_ref() {
+            let rem = windows::has_reminder(app);
+            let tos = windows::has_toast(app);
+            let alive = rem || tos;
+            // 窗口没了，或超过这次提醒该有的停留时长（+余量）就回收
+            let limit = e.pending_limit.max(30) as u64;
+            let el = at.elapsed().as_secs();
+            if !alive || el >= limit {
+                eprintln!(
+                    "[scheduler] pending 回收 pid={pid} reason={} elapsed={el}s limit={limit}s \
+                     reminder={rem} toast={tos} labels={:?}",
+                    if alive { "超时" } else { "窗口已消失" },
+                    windows::window_labels(app)
+                );
+                stale_pending = true;
+                e.pending = None;
+            }
+        }
 
         // 1. 会话到期结束
         if let Some(s) = &e.session {
@@ -473,11 +528,10 @@ fn tick(app: &AppHandle) -> Result<(), String> {
                 .last_pop
                 .map(|i| i.elapsed() >= StdDuration::from_secs(3))
                 .unwrap_or(true);
-            let pending_ok = e
-                .pending
-                .as_ref()
-                .map(|(_, at)| at.elapsed() >= StdDuration::from_secs(60))
-                .unwrap_or(true);
+            // 一次只弹一个提醒：上一个还没关就绝不弹下一个。
+            // 之前这里给了 60 秒宽限，结果会出现「眼保健操还开着，喝水又盖上来」的叠窗。
+            // 窗口死掉的情况由上面的 pending 自愈兜底。
+            let pending_ok = e.pending.is_none();
 
             if soft_ok && gap_ok && pending_ok && !e.queue.is_empty() {
                 // 优先级排序（先快照优先级，避免同时借用）
@@ -495,18 +549,25 @@ fn tick(app: &AppHandle) -> Result<(), String> {
 
                 let id = e.queue.remove(0);
                 let found = e.tasks.iter().find(|t| t.task.id == id).map(|rt| {
-                    let style = effective_remind(&e.settings, &rt.task).style;
-                    (rt.task.clone(), style, rt.task.enabled)
+                    let prof = effective_remind(&e.settings, &rt.task);
+                    // 占屏时长要取三者最大：提醒配置里的停留时长、任务自身的
+                    // 动作时长（眼保健操 120s / 远眺 300s）、全局自动关闭秒数。
+                    // 只按提醒配置算是错的 —— 眼睛的 profile durationSec 通常是 0，
+                    // 算出来只有 70s，120s 的倒计时还没走完就被当成超时回收，
+                    // 于是下一个提醒直接盖上来（用户看到的「提醒互相冲突」）。
+                    let stay = prof
+                        .duration_sec
+                        .max(rt.task.duration_sec())
+                        .max(e.settings.auto_close_sec)
+                        .max(20);
+                    let limit = stay + 40;
+                    (rt.task.clone(), rt.task.enabled, limit)
                 });
-                if let Some((task, style, enabled)) = found {
+                if let Some((task, enabled, limit)) = found {
                     if enabled {
-                        to_show.push(task);
+                        // pending 留到窗口真正建好之后再写，见下方 to_show 循环
+                        to_show.push(PendingShow { task, limit });
                         e.last_pop = Some(Instant::now());
-                        if style != STYLE_SYSTEM {
-                            e.pending = Some((id.clone(), Instant::now()));
-                        } else {
-                            e.pending = None;
-                        }
                     }
                 }
             }
@@ -520,6 +581,10 @@ fn tick(app: &AppHandle) -> Result<(), String> {
             );
             e.last_reason = reason_str.clone();
         }
+        e.tick_n = e.tick_n.wrapping_add(1);
+        if e.tick_n % 5 == 1 {
+            e.records = db.today_records(40);
+        }
         snapshot = e.snapshot(reason_str.as_deref());
         if e.queue.len() > 8 {
             // 防止无限堆积
@@ -527,11 +592,17 @@ fn tick(app: &AppHandle) -> Result<(), String> {
         }
     }
 
-    let mut snapshot = snapshot;
-    snapshot.records = db.today_records(40);
+    let snapshot = snapshot;
+
+    if stale_pending {
+        eprintln!("[scheduler] 提醒窗口已消失，清空 pending 并回收残留窗口");
+        windows::destroy_reminders(app);
+        windows::destroy_toasts(app);
+    }
 
     update_tray(app, &snapshot);
-    let _ = app.emit("tick", &snapshot);
+    // 只推给主窗口：提醒窗/消息窗不需要快照，广播只会让它们白刷新
+    let _ = app.emit_to("main", "tick", &snapshot);
 
     if let Some((key, mins)) = warn {
         let lang = ENGINE.lock().resolved_lang.clone();
@@ -539,19 +610,46 @@ fn tick(app: &AppHandle) -> Result<(), String> {
         crate::notify::send_text(app, &title, &body);
     }
 
-    for task in to_show {
-        let payload = build_payload(app, &task);
+    for item in to_show {
+        let task = &item.task;
+        let payload = build_payload(app, task);
+        eprintln!(
+            "[scheduler] 弹出提醒 {} type={} style={}",
+            task.id, task.task_type, payload.style
+        );
+        let mut shown = true;
         match payload.style.as_str() {
             STYLE_FULLSCREEN => {
                 windows::show_reminder_all(app, &task.id);
+                // 建窗可能失败（显示器枚举失败等），失败了就别登记 pending，
+                // 否则会把后续提醒全压住
+                shown = windows::has_reminder(app);
+                if !shown {
+                    eprintln!("[scheduler] 全屏窗未创建成功，不登记 pending");
+                }
             }
             STYLE_TOAST => {
                 windows::show_toast(app, &task.id, &payload.toast_pos);
+                shown = windows::has_toast(app);
+                if !shown {
+                    eprintln!("[scheduler] 消息窗未创建成功，不登记 pending");
+                }
             }
             _ => {
                 crate::notify::send(app, &payload);
             }
         }
+
+        // 只有真的占了屏才登记 pending（系统通知不需要用户关窗）
+        if payload.style != STYLE_SYSTEM {
+            let mut e = ENGINE.lock();
+            if shown && e.pending.is_none() {
+                e.pending = Some((task.id.clone(), Instant::now()));
+                e.pending_limit = item.limit;
+            }
+            drop(e);
+        }
+
         let _ = app.emit("remind", &payload);
     }
 
@@ -617,13 +715,29 @@ pub fn build_payload(app: &AppHandle, task: &Task) -> RemindPayload {
     }
 }
 
+/// 上一次写入托盘的 "标题|提示"，相同就不再调用，避免每秒向主线程派发
+static TRAY_CACHE: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(String::new()));
+
+fn set_tray(tray: &tauri::tray::TrayIcon, title: Option<&str>, tip: &str) {
+    let key = format!("{}|{}", title.unwrap_or(""), tip);
+    {
+        let mut cache = TRAY_CACHE.lock();
+        if *cache == key {
+            return;
+        }
+        *cache = key;
+    }
+    let _ = tray.set_title(title);
+    let _ = tray.set_tooltip(Some(tip));
+}
+
 fn update_tray(app: &AppHandle, snap: &Snapshot) {
     let Some(tray) = app.tray_by_id("main-tray") else {
         return;
     };
     let settings = ENGINE.lock().settings.clone();
     if !settings.tray_countdown {
-        let _ = tray.set_title(None::<&str>);
+        set_tray(&tray, None, "小满 Sip");
         return;
     }
     if let Some(s) = &snap.session {
@@ -632,33 +746,30 @@ fn update_tray(app: &AppHandle, snap: &Snapshot) {
         } else {
             format!("● {}:{:02}", s.remaining_sec / 60, s.remaining_sec % 60)
         };
-        let _ = tray.set_title(Some(&label));
-        let _ = tray.set_tooltip(Some(format!("会议模式进行中 · {label}")));
+        set_tray(&tray, Some(&label), &format!("会议模式进行中 · {label}"));
         return;
     }
     if snap.quiet_now {
         let end = snap.quiet_end.clone().unwrap_or_default();
-        let _ = tray.set_title(Some("·"));
-        let _ = tray.set_tooltip(Some(format!("休息时段 · {end} 后恢复")));
+        set_tray(&tray, Some("·"), &format!("休息时段 · {end} 后恢复"));
         return;
     }
     if let Some(id) = &snap.next_task_id {
         if let Some(t) = snap.tasks.iter().find(|t| t.task.id.as_str() == id.as_str()) {
             let r = t.remaining_sec.max(0);
             let label = format!("{}:{:02}", r / 60, r % 60);
-            let _ = tray.set_title(Some(&label));
-            let _ = tray.set_tooltip(Some(format!("下次提醒 {label}")));
+            set_tray(&tray, Some(&label), &format!("下次提醒 {label}"));
             return;
         }
     }
-    let _ = tray.set_title(None::<&str>);
-    let _ = tray.set_tooltip(Some("小满 Sip"));
+    set_tray(&tray, None, "小满 Sip");
 }
 
 // ---------------- 会话（会议 / 专注） ----------------
 
 fn fill_records(db: &Db, mut s: Snapshot) -> Snapshot {
     s.records = db.today_records(40);
+    ENGINE.lock().records = s.records.clone();
     s
 }
 
@@ -795,6 +906,10 @@ pub fn log_action(app: &AppHandle, task_id: &str, action: &str, value: Option<f6
     if let Some((pid, _)) = &e.pending {
         if pid == task_id {
             e.pending = None;
+            // 用户点了「完成/跳过」，窗口还要做 200ms 淡出；
+            // 这里同步刷新 last_pop，下一条提醒会等满 3 秒再来，
+            // 不至于把正在消失的窗口直接拽掉
+            e.last_pop = Some(Instant::now());
         }
     }
     let snap = e.snapshot(if in_session { Some("session") } else { None });

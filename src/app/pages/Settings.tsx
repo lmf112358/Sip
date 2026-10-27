@@ -18,7 +18,7 @@ export function SettingsPage({ onOpenReminder }: { onOpenReminder: () => void })
   const { settings, update } = useStore();
   const [autoStart, setAutoStart] = useState(settings.autoStart);
   const [newApp, setNewApp] = useState("");
-  const [version] = useState("1.4.0");
+  const [version] = useState("1.4.2");
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -221,16 +221,27 @@ export function SettingsPage({ onOpenReminder }: { onOpenReminder: () => void })
         </Row>
       </Card>
 
-      {/* 关于 */}
-      <Card style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between" }}>
+      {/* 关于 + 退出 */}
+      <Card style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 13.5 }}>{t("app.name")}</div>
           <div style={{ fontSize: 11.5, color: "var(--text-mute)", marginTop: 3 }}>
             {t("settings.version")} {version}
           </div>
         </div>
-        <div style={{ fontSize: 11, color: "var(--text-mute)", alignSelf: "flex-end" }}>
-          Tauri · React
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Tauri · React</span>
+          {/* 托盘菜单之外再给一个明确的退出入口：
+              之前只剩托盘一条路，托盘一卡用户就完全退不出去 */}
+          <Button
+            variant="ghost"
+            onClick={() => {
+              if (!confirm(t("settings.quitConfirm"))) return;
+              void api.quit();
+            }}
+          >
+            {t("settings.quit")}
+          </Button>
         </div>
       </Card>
     </div>

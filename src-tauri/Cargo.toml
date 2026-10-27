@@ -1,6 +1,6 @@
 [package]
 name = "sip"
-version = "1.4.0"
+version = "1.4.2"
 description = "小满 Sip - 喝水 / 眼保健操 / 提肛 / 摸鱼 多任务定时提醒"
 authors = ["Li Mingfeng"]
 edition = "2021"
@@ -8,6 +8,13 @@ edition = "2021"
 [lib]
 name = "sip_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# 生产构建必须开这个特性：不开的话页面 URL 会解析成 devUrl（http://localhost:1420），
+# 打包后的 exe 在没有 dev server 的机器上会打开一个空白窗口 —— 提醒页加载失败，
+# 倒计时不跑、也不自动关闭，表现就是「全屏提醒卡死、其它提醒全被压住」。
+# `tauri build` 会自动带上它；手动 `cargo build --release --features custom-protocol`。
+custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

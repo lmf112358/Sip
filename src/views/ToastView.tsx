@@ -19,6 +19,20 @@ export function ToastView() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    void api.diag(`toast mount task=[${taskId}] preview=${isPreview} search=[${location.search}]`);
+  }, []);
+
+  // 消息窗也支持 Esc 关闭（虽然它默认不抢焦点，抢到焦点时仍然好用）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") void dismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     api.getSettings().then((s) => {
       setSettings(s);
       applyTheme(s);

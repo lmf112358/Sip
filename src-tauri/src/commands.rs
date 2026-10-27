@@ -22,6 +22,7 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> Result<Settings, Str
         let mut e = ENGINE.lock();
         e.settings = settings.clone();
     }
+    crate::CLOSE_TO_TRAY.store(settings.close_to_tray, std::sync::atomic::Ordering::Relaxed);
     let _ = app.emit_all_settings(&settings);
     Ok(settings)
 }
@@ -247,15 +248,23 @@ pub fn get_remind_payload(app: AppHandle, task_id: String) -> Option<RemindPaylo
 #[tauri::command]
 pub fn hide_reminder(app: AppHandle, label: String) {
     windows::hide_one(&app, &label);
+    // 一次提醒可能在多个显示器各开一个窗口，其余的一并关掉
+    windows::destroy_reminders(&app);
+    windows::destroy_toasts(&app);
     let mut e = ENGINE.lock();
     e.pending = None;
+    // 关掉之后留出 3 秒静默期（gap_ok 就是拿 last_pop 算的），
+    // 否则队列里积压的下一条会瞬间盖上来，看起来像「两个提醒打架」
+    e.last_pop = Some(std::time::Instant::now());
 }
 
 #[tauri::command]
 pub fn hide_toast(app: AppHandle) {
     windows::hide_toast(&app);
+    windows::destroy_reminders(&app);
     let mut e = ENGINE.lock();
     e.pending = None;
+    e.last_pop = Some(std::time::Instant::now());
 }
 
 #[tauri::command]
@@ -279,7 +288,13 @@ pub fn sync_language(app: AppHandle, lang: String) -> Result<(), String> {
     crate::rebuild_tray(&app).map_err(|e| e.to_string())
 }
 
+/// 前端诊断日志：提醒窗/消息窗到底有没有渲染出来，直接看后台日志即可
+#[tauri::command]
+pub fn diag(msg: String) {
+    eprintln!("[ui] {msg}");
+}
+
 #[tauri::command]
 pub fn quit(app: AppHandle) {
-    app.exit(0);
+    crate::request_quit(&app);
 }

@@ -131,6 +131,8 @@ export const en: Record<MsgKey, string> = {
   "settings.data": "Data",
   "settings.export": "Export all records (CSV)",
   "settings.openDir": "Open data folder",
+  "settings.quit": "Quit Sip",
+  "settings.quitConfirm": "Reminders stop after quitting. Quit now?",
   "settings.about": "About",
   "settings.version": "Version",
   "settings.meetingDefault": "Default meeting length",

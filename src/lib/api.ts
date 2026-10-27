@@ -14,6 +14,8 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 }
 
 export const api = {
+  /** 前端诊断日志：只在桌面端发，浏览器里直接丢掉 */
+  diag: (msg: string) => (isTauri() ? call<void>("diag", { msg }).catch(() => undefined) : Promise.resolve()),
   snapshot: () => call<Snapshot>("snapshot"),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<Settings>("save_settings", { settings }),
