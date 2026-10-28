@@ -81,6 +81,52 @@ pub fn in_whitelist(whitelist: &[String]) -> bool {
         if w.is_empty() {
             return false;
         }
-        app_lower.contains(&w) || w.contains(&app_lower)
+        if app_lower.contains(&w) || w.contains(&app_lower) {
+            return true;
+        }
+        // 中文应用名匹配不到进程名（腾讯会议的进程叫 wemeetapp.exe），
+        // 必须靠别名表，否则默认白名单里的「腾讯会议」永远不生效
+        exe_aliases(&w).iter().any(|a| app_lower.contains(a))
     })
+}
+
+/// 白名单项 → 真实进程名片段
+fn exe_aliases(w: &str) -> &'static [&'static str] {
+    match w {
+        "腾讯会议" | "tencent meeting" | "wemeet" | "voov" => &["wemeetapp", "wemeet", "voov"],
+        "钉钉" | "dingtalk" => &["dingtalk"],
+        "飞书" | "feishu" | "lark" => &["feishu", "lark"],
+        "企业微信" | "wecom" => &["wxwork"],
+        "微信" | "wechat" => &["wechat", "weixin"],
+        "zoom" => &["zoom"],
+        "teams" | "microsoft teams" => &["teams"],
+        _ => &[],
+    }
+}
+
+/// 启动失败时的原生弹窗：windows_subsystem="windows" 没有控制台，
+/// 只 eprintln 等于什么都没说，用户只会觉得「点了没反应」。
+#[cfg(windows)]
+pub fn fatal_dialog(msg: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        MessageBoxW, MB_ICONERROR, MB_OK, MB_SETFOREGROUND,
+    };
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+    let text = wide(msg);
+    let cap = wide("小满 Sip");
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            cap.as_ptr(),
+            MB_OK | MB_ICONERROR | MB_SETFOREGROUND,
+        );
+    }
+}
+
+#[cfg(not(windows))]
+pub fn fatal_dialog(msg: &str) {
+    eprintln!("[sip] {msg}");
 }

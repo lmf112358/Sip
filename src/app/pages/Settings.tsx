@@ -18,7 +18,7 @@ export function SettingsPage({ onOpenReminder }: { onOpenReminder: () => void })
   const { settings, update } = useStore();
   const [autoStart, setAutoStart] = useState(settings.autoStart);
   const [newApp, setNewApp] = useState("");
-  const [version] = useState("1.4.2");
+  const [version] = useState("1.4.3");
 
   useEffect(() => {
     if (!isTauri()) return;

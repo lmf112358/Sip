@@ -200,7 +200,7 @@ pub struct RemindPayload {
 
 /// 作息中的安静时段（午休 / 夜间）。命中时冻结计时、不提醒、不记 skip
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct QuietHour {
     pub start: String,
     pub end: String,
@@ -227,7 +227,7 @@ pub fn default_quiet_hours() -> Vec<QuietHour> {
 
 /// 按任务类型的提醒默认值
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct RemindProfile {
     pub style: String,
     pub template_id: String,
@@ -247,6 +247,17 @@ pub struct RemindProfile {
     pub show_countdown: bool,
     pub sender_name: String,
     pub message_text: String,
+}
+
+impl Default for QuietHour {
+    fn default() -> Self {
+        QuietHour {
+            start: "12:00".into(),
+            end: "13:30".into(),
+            days: vec![1, 2, 3, 4, 5],
+            grace_sec: 60,
+        }
+    }
 }
 
 impl Default for RemindProfile {
@@ -322,7 +333,7 @@ pub fn default_reminders() -> HashMap<String, RemindProfile> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub theme: String,
     pub accent: String,

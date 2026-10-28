@@ -1,7 +1,7 @@
 # 小满 · Sip
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.4.2-2ea44f">
+  <img alt="version" src="https://img.shields.io/badge/version-1.4.3-2ea44f">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20%C2%B7%20macOS%2012%2B-blue">
   <img alt="tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB">
   <img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-green">
@@ -122,6 +122,24 @@ npm run tauri build
 | `Ctrl/Cmd + Shift + X` | 强制关闭当前提醒（逃生键，任何时候都能用） |
 | `Esc` / `Enter` | 全屏提醒中关闭 / 确认完成 |
 | 鼠标左键 | 全屏提醒中点击任意位置关闭 |
+
+## 已修复的问题（v1.4.3）
+
+第二轮排查针对「数据正确性」和「多实例 / 自启」：
+
+| 症状 | 根因 | 修法 |
+| --- | --- | --- |
+| **同时开两个程序 → 双份弹窗、两个托盘、快捷键失效** | 没有任何单实例保护，两套调度器同时在跑 | 接入 `tauri-plugin-single-instance`（第一个注册），第二个实例唤起已有窗口后自行退出 |
+| 记录偶尔少几条，统计对不上 | 多进程写同一个 sqlite 时立即返回 `SQLITE_BUSY`（默认 `busy_timeout=0`），而写记录处全是 `let _ =` 吞掉错误 | `PRAGMA busy_timeout=5s` + 写失败必须打日志 |
+| **一进入工作时段就连弹四个提醒** | 任务在活跃时段外时 `next_due` 原地不动，一直停在过去；到点后四条任务同时到期 | 非活跃时段把 `next_due` 清零，进入时段后从 `now + interval` 重新起算 |
+| 开机自启每次都弹出主窗口 | `--silent` 只是注册自启时的参数，代码里根本没解析；主窗口 `visible: true` | 解析 argv，`--silent` 时只驻留托盘；主窗口改为 `visible: false`，由 setup 决定是否显示 |
+| 启动失败时毫无提示 | `Db::init(...).expect(...)`，`windows_subsystem="windows"` 没有控制台 | 初始化失败弹原生错误框并给出排查建议 |
+| 删了数据重启，旧记录又回来了 | 旧版本迁移逻辑只要发现 `sip.db` 不存在就再搬一次 | 迁移完成后写 `.legacy_migrated` 标记，只搬一次 |
+| 老版本升级上来，设置被重置 | `Settings` 只有部分字段带 `#[serde(default)]`，缺一个字段整份解析失败 → 回落默认值 | `Settings` / `RemindProfile` / `QuietHour` 全部结构体级 `default` |
+| 音量滑杆一拖，托盘菜单被重建几十次 | 每次保存设置都调 `syncLanguage` → `rebuild_tray` | 只在语言真的变化时重建 |
+| 手快双击「完成」记两次账 | 按钮点击会冒泡到「点任意处关闭」，且无防重复 | 按钮 `stopPropagation` + `actedRef` + store 层 800ms 去重 |
+| 白名单里的「腾讯会议」从不生效 | 进程名是 `wemeetapp.exe`，中文名匹配不上 | 增加中文应用名 → 进程名别名表 |
+| 提醒页若加载失败，空窗占屏 70 秒 | 只能靠 `pending` 超时兜底 | 新增 2.5 秒加载看门狗：URL 不在 tauri 协议就销毁窗口 |
 
 ## 已修复的问题（v1.4.2）
 

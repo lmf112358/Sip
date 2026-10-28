@@ -493,6 +493,10 @@ fn tick(app: &AppHandle) -> Result<(), String> {
             let mut due_ids: Vec<String> = Vec::new();
             for rt in &mut e.tasks {
                 if !is_active_task(rt, now) {
+                    // 不在活跃时段：倒计时清零，等进入时段后从 now + interval 重新起算。
+                    // 之前这里直接 continue，next_due 会一直停在「过去的某一刻」，
+                    // 一旦进入活跃时段四条任务同时到期 → 早上一进工位就连弹四个提醒。
+                    rt.next_due = None;
                     continue;
                 }
                 if rt.goal_reached() || rt.cap_reached() {
@@ -854,6 +858,18 @@ pub fn extend_session(app: &AppHandle, minutes: i64) -> Snapshot {
     fill_records(&db, snap)
 }
 
+/// 写记录：失败必须发声。静默失败会让「今日统计」凭空少几条，
+/// 而用户只会觉得软件算错了。数据库已配 busy_timeout=5s，
+/// 走到这里基本就是磁盘/权限级别的真错误了。
+fn record(db: &Db, task: &Task, action: &str, value: f64) {
+    if let Err(e) = db.insert_record(task, action, value) {
+        eprintln!(
+            "[scheduler] 写入记录失败 task={} action={action} value={value} err={e}",
+            task.id
+        );
+    }
+}
+
 /// 用户完成 / 跳过 / 延后
 pub fn log_action(app: &AppHandle, task_id: &str, action: &str, value: Option<f64>) -> Snapshot {
     let db = app.state::<Db>();
@@ -876,12 +892,12 @@ pub fn log_action(app: &AppHandle, task_id: &str, action: &str, value: Option<f6
             e.tasks[idx].next_due = Some(now + Duration::minutes(mins));
             e.tasks[idx].snoozed = true;
             if !in_session {
-                let _ = db.insert_record(&task, "snooze", mins as f64);
+                record(&db, &task, "snooze", mins as f64);
             }
         }
         "skip" => {
             if !in_session {
-                let _ = db.insert_record(&task, "skip", 0.0);
+                record(&db, &task, "skip", 0.0);
                 e.tasks[idx].skip_today += 1;
             }
             e.tasks[idx].next_due = Some(now + Duration::minutes(task.interval_min.max(1)));
@@ -890,7 +906,7 @@ pub fn log_action(app: &AppHandle, task_id: &str, action: &str, value: Option<f6
         _ => {
             // complete
             let v = value.unwrap_or(task.unit_value);
-            let _ = db.insert_record(&task, "complete", v);
+            record(&db, &task, "complete", v);
             if task.task_type == T_WATER {
                 e.tasks[idx].done_today += v;
             } else {
@@ -1005,6 +1021,19 @@ mod tests {
         assert_eq!(s.profile(T_KEGEL).toast_skin, "toast-chat");
         // 眼保健操必须手动关闭（不自动跳过动作）
         assert_eq!(s.profile(T_EYES).duration_sec, 0);
+    }
+
+    #[test]
+    fn settings_partial_json_falls_back_per_field() {
+        // 老版本存下的 JSON 少字段时，绝不能整体解析失败 ——
+        // 一旦失败，db.settings() 会回落成 Settings::default()，
+        // 用户的主题/音量/白名单会全部被静默重置。
+        let partial = r#"{"theme":"light","volume":0.4}"#;
+        let s: Settings = serde_json::from_str(partial).expect("缺字段不应导致解析失败");
+        assert_eq!(s.theme, "light");
+        assert_eq!(s.volume, 0.4);
+        assert_eq!(s.auto_close_sec, 30);
+        assert!(!s.reminder.is_empty());
     }
 
     #[test]

@@ -30,24 +30,35 @@ fn join_weekdays(v: &[u8]) -> String {
 /// 首次启动时把旧库和自定义背景搬过来，否则老用户会以为「记录全丢了」。
 fn migrate_from_legacy(new_dir: &Path) {
     let Some(parent) = new_dir.parent() else { return };
+    // 只搬一次：搬完写标记文件。
+    // 否则用户主动删掉 sip.db（想重置数据 / 卸载重装）后，下次启动又会把
+    // 旧版 ticker.db 原样搬回来 —— 数据「复活」，看起来像删不掉。
+    let marker = new_dir.join(".legacy_migrated");
+    if marker.exists() {
+        return;
+    }
     let legacy = parent.join("com.ticker.desktop");
+    let mark_done = |dir: &Path| {
+        let _ = std::fs::write(dir.join(".legacy_migrated"), "1");
+    };
     if !legacy.is_dir() || new_dir.join("sip.db").exists() {
+        mark_done(new_dir);
         return;
     }
     let old_db = legacy.join("ticker.db");
     if !old_db.is_file() {
+        mark_done(new_dir);
         return;
     }
     if let Err(e) = std::fs::copy(&old_db, new_dir.join("sip.db")) {
         eprintln!("[sip] 旧数据迁移失败（改用空库）：{e}");
         return;
     }
-    // WAL 尾部一起带过来，避免丢掉最后一次 tick 写入
-    for ext in ["-wal", "-shm"] {
-        let src = legacy.join(format!("ticker.db{ext}"));
-        if src.is_file() {
-            let _ = std::fs::copy(&src, new_dir.join(format!("sip.db{ext}")));
-        }
+    // WAL 尾部一起带过来，避免丢掉最后一次写入。
+    // -shm 是共享内存索引，由 SQLite 自己重建，不复制。
+    let src = legacy.join("ticker.db-wal");
+    if src.is_file() {
+        let _ = std::fs::copy(&src, new_dir.join("sip.db-wal"));
     }
     // 自定义背景图 / GIF
     let old_media = legacy.join("media");
@@ -63,6 +74,7 @@ fn migrate_from_legacy(new_dir: &Path) {
         }
     }
     println!("[sip] 已从旧版本目录迁移数据：{}", legacy.display());
+    mark_done(new_dir);
 }
 
 impl Db {
@@ -77,6 +89,11 @@ impl Db {
         std::fs::create_dir_all(&media_dir).map_err(|e| e.to_string())?;
 
         let conn = Connection::open(dir.join("sip.db")).map_err(|e| e.to_string())?;
+        // 写锁等待：默认 busy_timeout=0，一旦有第二个连接（另一个实例 / 外部工具）
+        // 正在写，本连接立刻返回 SQLITE_BUSY，而写记录的调用点又吞掉了错误 ——
+        // 表现就是「记录莫名其妙少了几条」。给 5 秒重试窗口。
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|e| e.to_string())?;
         conn.execute_batch(
             r#"
             PRAGMA journal_mode = WAL;

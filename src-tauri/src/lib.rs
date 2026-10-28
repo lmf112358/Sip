@@ -236,7 +236,20 @@ fn start_watchdog(app: AppHandle) {
 }
 
 pub fn run() {
+    // 开机自启会带 --silent：不该在这时候弹一个大窗口糊用户一脸
+    let silent = std::env::args().any(|a| a == "--silent") && !cfg!(debug_assertions);
+
     tauri::Builder::default()
+        // 必须第一个注册：第二个实例会被它拦下并唤起已有窗口，然后自己退出。
+        // 没有它就会出现两套调度器（双份提醒 / 两个托盘 / 两进程写同一个库）。
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            windows::show_main(app);
+            let v = app
+                .get_webview_window("main")
+                .and_then(|w| w.is_visible().ok())
+                .unwrap_or(false);
+            eprintln!("[sip] 已有实例在运行，已唤起主窗口 visible={v}，本实例退出");
+        }))
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
@@ -246,10 +259,20 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--silent"]),
         ))
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
 
-            let db = Db::init(&handle).expect("数据库初始化失败");
+            let db = match Db::init(&handle) {
+                Ok(db) => db,
+                Err(e) => {
+                    eprintln!("[sip] 数据库初始化失败: {e}");
+                    platform::fatal_dialog(&format!(
+                        "小满 Sip 无法启动\n\n数据库初始化失败：{e}\n\n\
+                         请检查磁盘剩余空间，以及 %APPDATA%\\com.sip.desktop 的写入权限。"
+                    ));
+                    std::process::exit(1);
+                }
+            };
             app.manage(db);
 
             scheduler::boot(&handle);
@@ -262,6 +285,16 @@ pub fn run() {
             scheduler::start_loop(handle.clone());
 
             start_watchdog(handle.clone());
+
+            // 主窗口在配置里是 visible:false，这里决定到底露不露面
+            if !silent {
+                windows::show_main(&handle);
+            }
+            let main_visible = handle
+                .get_webview_window("main")
+                .and_then(|w| w.is_visible().ok())
+                .unwrap_or(false);
+            eprintln!("[sip] 主窗口 visible={main_visible} silent={silent}");
 
             // 测试钩子：SIP_QUIT_AFTER_SEC=5 时 5 秒后走正常退出流程（用来验证「退出到底退不退得掉」）
             if let Ok(v) = std::env::var("SIP_QUIT_AFTER_SEC") {

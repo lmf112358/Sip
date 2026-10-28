@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { I18nProvider, useT } from "@/i18n";
 import type { MsgKey } from "@/i18n/zh";
@@ -17,6 +17,8 @@ export function ToastView() {
   const [taskId, setTaskId] = useState(paramTask);
   const [payload, setPayload] = useState<RemindPayload | null>(null);
   const [visible, setVisible] = useState(false);
+  // 防重复：整张卡片都是「点一下就完成」，手快双击会写两条记录
+  const actedRef = useRef(false);
 
   useEffect(() => {
     void api.diag(`toast mount task=[${taskId}] preview=${isPreview} search=[${location.search}]`);
@@ -86,12 +88,16 @@ export function ToastView() {
   };
 
   const complete = async () => {
+    if (actedRef.current) return;
+    actedRef.current = true;
     if (!payload || isPreview) return dismiss();
     await api.log(payload.taskId, "complete", payload.unitValue);
     dismiss();
   };
 
   const skip = async () => {
+    if (actedRef.current) return;
+    actedRef.current = true;
     if (!payload || isPreview) return dismiss();
     await api.log(payload.taskId, "skip");
     dismiss();

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { I18nProvider, useT } from "@/i18n";
@@ -35,6 +35,10 @@ export function ReminderView() {
   // left 还是初始 0，"归零即关闭"的 effect 会立刻把提醒完成/关掉。
   const [armed, setArmed] = useState(false);
   const [closing, setClosing] = useState(false);
+  // 防重复提交：点一次「完成」后，onClick 还会冒泡到根节点触发「点任意处关闭」，
+  // 手快双击也会走两遍 —— 前者会让窗口在写记录途中被销毁，后者直接写两条记录。
+  const actedRef = useRef(false);
+  const closingRef = useRef(false);
 
   useEffect(() => {
     api.getSettings().then((s) => {
@@ -125,6 +129,8 @@ export function ReminderView() {
   }, [left, payload, armed]);
 
   const closeSelf = async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
     void api.diag(`reminder close preview=${isPreview}`);
     setClosing(true);
     await new Promise((r) => setTimeout(r, 200));
@@ -143,18 +149,24 @@ export function ReminderView() {
   };
 
   const complete = async () => {
+    if (actedRef.current) return;
+    actedRef.current = true;
     if (!payload || isPreview) return closeSelf();
     await api.log(payload.taskId, "complete", payload.unitValue);
     await closeSelf();
   };
 
   const snooze = async () => {
+    if (actedRef.current) return;
+    actedRef.current = true;
     if (!payload || isPreview) return closeSelf();
     await api.snooze(payload.taskId, payload.snoozeMin);
     await closeSelf();
   };
 
   const skip = async () => {
+    if (actedRef.current) return;
+    actedRef.current = true;
     if (!payload || isPreview) return closeSelf();
     await api.log(payload.taskId, "skip");
     await closeSelf();
@@ -370,7 +382,10 @@ function ReminderBody({
         ) : null}
 
         <button
-          onClick={onComplete}
+          onClick={(e) => {
+            e.stopPropagation();
+            onComplete();
+          }}
           style={{
             marginTop: 6,
             height: 62,
@@ -390,16 +405,34 @@ function ReminderBody({
 
         <div style={{ display: "flex", gap: 26, marginTop: 4 }}>
           {!preview && payload && payload.snoozeMin > 0 ? (
-            <button onClick={onSnooze} style={{ fontSize: 12.5, color: "rgba(255,255,255,.55)" }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSnooze();
+              }}
+              style={{ fontSize: 12.5, color: "rgba(255,255,255,.55)" }}
+            >
               {t("remind.snooze", { n: payload.snoozeMin })}
             </button>
           ) : null}
           {!preview ? (
-            <button onClick={onSkip} style={{ fontSize: 12.5, color: "rgba(255,255,255,.55)" }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSkip();
+              }}
+              style={{ fontSize: 12.5, color: "rgba(255,255,255,.55)" }}
+            >
               {t("remind.skip")}
             </button>
           ) : null}
-          <button onClick={onClose} style={{ fontSize: 12.5, color: "rgba(255,255,255,.55)" }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            style={{ fontSize: 12.5, color: "rgba(255,255,255,.55)" }}
+          >
             {t("common.close")} · Esc
           </button>
         </div>

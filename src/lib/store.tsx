@@ -180,17 +180,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const update = useCallback(async (patch: Partial<Settings>) => {
-    const next = { ...settingsRef.current, ...patch };
+    const prev = settingsRef.current;
+    const next = { ...prev, ...patch };
     setSettings(next);
-    if (!isTauri()) {
-      await api.saveSettings(next).catch(() => undefined);
-      return;
-    }
     await api.saveSettings(next).catch(() => undefined);
-    api.syncLanguage(next.language).catch(() => undefined);
+    // 只有语言真的变了才重建托盘菜单：之前每次改音量/主题都重建一次，
+    // 拖滑杆会连着重建几十次菜单（主线程开销）
+    if (patch.language !== undefined && patch.language !== prev.language) {
+      api.syncLanguage(next.language).catch(() => undefined);
+    }
   }, []);
 
+  // 同一个任务同一个动作 800ms 内只写一次：双击 / 两个窗口同时回调都不会重复记账
+  const lastLog = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const log = useCallback(async (taskId: string, action: string, value?: number) => {
+    const now = Date.now();
+    const key = `${taskId}|${action}`;
+    if (lastLog.current.key === key && now - lastLog.current.at < 800) return;
+    lastLog.current = { key, at: now };
     const s = await api.log(taskId, action, value);
     setSnapshot(s);
   }, []);

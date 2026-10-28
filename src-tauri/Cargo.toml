@@ -1,6 +1,6 @@
 [package]
 name = "sip"
-version = "1.4.2"
+version = "1.4.3"
 description = "小满 Sip - 喝水 / 眼保健操 / 提肛 / 摸鱼 多任务定时提醒"
 authors = ["Li Mingfeng"]
 edition = "2021"
@@ -33,6 +33,8 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-process = "2"
+# 单实例：双开会导致两套调度器（双份弹窗 / 两个托盘）和两个进程写同一个 sqlite
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

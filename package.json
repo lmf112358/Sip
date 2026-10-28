@@ -1,7 +1,7 @@
 {
   "name": "sip",
   "private": true,
-  "version": "1.4.2",
+  "version": "1.4.3",
   "type": "module",
   "description": "小满 Sip - 喝水 / 眼保健操 / 提肛 / 摸鱼 多任务定时提醒",
   "scripts": {

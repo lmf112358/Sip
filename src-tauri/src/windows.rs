@@ -66,6 +66,29 @@ pub fn destroy_toasts(app: &AppHandle) {
     }
 }
 
+/// 页面加载看门狗。
+///
+/// 提醒窗/消息窗是「先建窗、再让网页自己取数据渲染」的，如果前端因为任何原因
+/// 没加载起来（资源缺失、JS 崩了、打包漏了 custom-protocol），用户看到的就是
+/// 一块纯色空窗，而且它会把 pending 占满整整 pending_limit（70s+），
+/// 期间后面所有任务都排不进来。这里 2.5 秒后验一次 URL，没进 tauri 协议就是
+/// 白屏，直接销毁，把 70 秒的僵死压到 2.5 秒。
+fn watch_load(win: tauri::WebviewWindow, label: String) {
+    if cfg!(debug_assertions) {
+        return; // dev 走 http://localhost:1420，是正常的
+    }
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+        let url = win.url().map(|u| u.to_string()).unwrap_or_default();
+        let loaded = url.contains("tauri.localhost") || url.contains("asset.localhost");
+        eprintln!("[window] {label} 2.5s 后 url={url} loaded={loaded}");
+        if !loaded {
+            eprintln!("[window] {label} 页面未加载（白屏），销毁窗口以免占屏阻塞后续提醒");
+            let _ = win.destroy();
+        }
+    });
+}
+
 /// 每个显示器一个全屏提醒窗。
 ///
 /// 每次都销毁重建：复用旧窗口会保留上一次的 `?task=` 参数与陈旧 DOM，
@@ -131,14 +154,18 @@ pub fn show_reminder_all(app: &AppHandle, task_id: &str) {
                 // 探针：建窗那一瞬间 url() 常常还是 about:blank，1.5 秒后再看一次，
                 // 才能判断页面到底有没有真的开始加载（加载失败＝用户看到一块空屏，
                 // 而且页面里的倒计时不会跑，只能靠调度器超时兜底）
+                let probe_label = label.clone();
                 let probe = win.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(1500));
                     let u = probe.url().map(|x| x.to_string()).unwrap_or_default();
                     let t = probe.title().unwrap_or_default();
                     let vis = probe.is_visible().unwrap_or(false);
-                    eprintln!("[window] 提醒窗 {label} 1.5s 后 url={u} title=[{t}] visible={vis}");
+                    eprintln!(
+                        "[window] 提醒窗 {probe_label} 1.5s 后 url={u} title=[{t}] visible={vis}"
+                    );
                 });
+                watch_load(win.clone(), label);
             }
             Err(e) => eprintln!("[window] 创建提醒窗口 {label} 失败: {e}"),
         }
@@ -236,6 +263,7 @@ fn build_toast(app: &AppHandle, url: &str, label: &str, pos: &str) {
             let _ = win.set_always_on_top(true);
             let _ = win.show();
             eprintln!("[window] 消息窗已显示 {label} {url}");
+            watch_load(win.clone(), label.to_string());
         }
         Err(e) => eprintln!("[window] 创建消息窗 {label} 失败: {e}"),
     }
