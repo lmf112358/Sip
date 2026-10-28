@@ -4,6 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>提醒</title>
+    <!-- 页面级兜底日志：release 下 WebView 控制台看不见，JS 一挂就只剩空窗口。
+         这里把加载失败 / 运行时报错 / 是否真的挂载，全部送回主进程日志。 -->
+    <script>
+      (function () {
+        var send = function (m) {
+          try {
+            var i = window.__TAURI_INTERNALS__;
+            if (i && i.invoke) i.invoke("diag", { msg: "reminder-html " + m });
+          } catch (e) {}
+        };
+        send("boot href=" + location.href);
+        window.addEventListener(
+          "error",
+          function (ev) {
+            var t = ev.target;
+            if (t && t.tagName && (t.tagName === "SCRIPT" || t.tagName === "LINK")) {
+              send("RESOURCE FAIL <" + t.tagName.toLowerCase() + "> " + (t.src || t.href || ""));
+              return;
+            }
+            send(
+              "ERROR " + (ev.message || "") + " @" + (ev.filename || "?") + ":" + (ev.lineno || 0)
+            );
+          },
+          true
+        );
+        window.addEventListener("unhandledrejection", function (ev) {
+          var r = ev.reason;
+          send("REJECT " + ((r && (r.stack || r.message)) || String(r)));
+        });
+        setTimeout(function () {
+          var root = document.getElementById("root");
+          var n = root ? root.childElementCount : -1;
+          send("root children=" + n + (n > 0 ? " ok" : " EMPTY"));
+        }, 2000);
+      })();
+    </script>
     <style>
       html,
       body {

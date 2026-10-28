@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod i18n;
+mod logging;
 mod models;
 mod notify;
 mod platform;
@@ -24,13 +25,13 @@ pub static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(true);
 /// 真正的退出：先销毁所有窗口（含可能卡住的 WebView），再走正常退出；
 /// 2 秒后仍未退出就强杀进程 —— 退出必须退得掉，这是底线。
 pub fn request_quit(app: &AppHandle) {
-    println!("[sip] 退出中…");
+    crate::logln!("[sip] 退出中…");
     windows::destroy_all(app);
     app.exit(0);
     let handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(2000));
-        eprintln!("[sip] 正常退出超时，强制结束进程");
+        crate::logln!("[sip] 正常退出超时，强制结束进程");
         let _ = &handle;
         std::process::exit(0);
     });
@@ -178,7 +179,7 @@ fn register_shortcuts(app: &AppHandle) {
         }
     });
     if let Err(e) = res {
-        eprintln!("[shortcut] Ctrl+Shift+M 注册失败: {e}");
+        crate::logln!("[shortcut] Ctrl+Shift+M 注册失败: {e}");
     }
 
     let res2 = app.global_shortcut().on_shortcut(h, |app, _sc, event| {
@@ -187,7 +188,7 @@ fn register_shortcuts(app: &AppHandle) {
         }
     });
     if let Err(e) = res2 {
-        eprintln!("[shortcut] Ctrl+Shift+H 注册失败: {e}");
+        crate::logln!("[shortcut] Ctrl+Shift+H 注册失败: {e}");
     }
 
     // 逃生键：万一提醒窗的网页没渲染出来（白屏/黑屏），Esc 就没机会响应，
@@ -200,10 +201,10 @@ fn register_shortcuts(app: &AppHandle) {
         windows::destroy_reminders(app);
         windows::destroy_toasts(app);
         ENGINE.lock().pending = None;
-        eprintln!("[shortcut] 已强制关闭所有提醒");
+        crate::logln!("[shortcut] 已强制关闭所有提醒");
     });
     if let Err(e) = res3 {
-        eprintln!("[shortcut] Ctrl+Shift+X 注册失败: {e}");
+        crate::logln!("[shortcut] Ctrl+Shift+X 注册失败: {e}");
     }
 }
 
@@ -227,17 +228,21 @@ fn start_watchdog(app: AppHandle) {
             Ok(()) => {
                 let ms = t0.elapsed().as_millis();
                 if ms >= 500 {
-                    eprintln!("[watchdog] 主线程响应耗时 {ms}ms");
+                    crate::logln!("[watchdog] 主线程响应耗时 {ms}ms");
                 }
             }
-            Err(_) => eprintln!("[watchdog] 主线程 5 秒无响应，疑似卡死"),
+            Err(_) => crate::logln!("[watchdog] 主线程 5 秒无响应，疑似卡死"),
         }
     });
 }
 
 pub fn run() {
+    // 日志落盘要在一切之前：GUI 子系统下 stderr 是黑洞，装完出问题只能靠这个文件
+    logging::init();
+
     // 开机自启会带 --silent：不该在这时候弹一个大窗口糊用户一脸
     let silent = std::env::args().any(|a| a == "--silent") && !cfg!(debug_assertions);
+    crate::logln!("[sip] 参数 silent={silent} args={:?}", std::env::args().skip(1).collect::<Vec<_>>());
 
     tauri::Builder::default()
         // 必须第一个注册：第二个实例会被它拦下并唤起已有窗口，然后自己退出。
@@ -248,7 +253,7 @@ pub fn run() {
                 .get_webview_window("main")
                 .and_then(|w| w.is_visible().ok())
                 .unwrap_or(false);
-            eprintln!("[sip] 已有实例在运行，已唤起主窗口 visible={v}，本实例退出");
+            crate::logln!("[sip] 已有实例在运行，已唤起主窗口 visible={v}，本实例退出");
         }))
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
@@ -265,7 +270,7 @@ pub fn run() {
             let db = match Db::init(&handle) {
                 Ok(db) => db,
                 Err(e) => {
-                    eprintln!("[sip] 数据库初始化失败: {e}");
+                    crate::logln!("[sip] 数据库初始化失败: {e}");
                     platform::fatal_dialog(&format!(
                         "小满 Sip 无法启动\n\n数据库初始化失败：{e}\n\n\
                          请检查磁盘剩余空间，以及 %APPDATA%\\com.sip.desktop 的写入权限。"
@@ -294,14 +299,14 @@ pub fn run() {
                 .get_webview_window("main")
                 .and_then(|w| w.is_visible().ok())
                 .unwrap_or(false);
-            eprintln!("[sip] 主窗口 visible={main_visible} silent={silent}");
+            crate::logln!("[sip] 主窗口 visible={main_visible} silent={silent}");
 
             // 测试钩子：SIP_PREVIEW=water 启动 4 秒后自动播一次预览，用于排查「预览黑屏」
             if let Ok(kind) = std::env::var("SIP_PREVIEW") {
                 let h = handle.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(4));
-                    eprintln!("[sip] 测试钩子触发预览 kind={kind}");
+                    crate::logln!("[sip] 测试钩子触发预览 kind={kind}");
                     commands::preview_reminder(h, kind, None);
                     // 预览窗一般 5 秒后自关，这里把退出也往后推，方便抓屏
                 });
@@ -313,14 +318,14 @@ pub fn run() {
                     let h = handle.clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_secs(sec));
-                        eprintln!("[sip] 测试钩子触发退出");
+                        crate::logln!("[sip] 测试钩子触发退出");
                         crate::request_quit(&h);
                     });
                 }
             }
 
             RUST_LOG_READY.store(true, Ordering::SeqCst);
-            println!("[sip] 启动完成");
+            crate::logln!("[sip] 启动完成");
             Ok(())
         })
         .on_window_event(|window, event| {

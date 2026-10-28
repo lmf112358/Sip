@@ -354,9 +354,9 @@ pub fn boot(app: &AppHandle) {
         }
         e.settings.v = 2;
         if let Err(err) = db.save_settings(&e.settings) {
-            eprintln!("[sip] 设置迁移写库失败: {err}");
+            crate::logln!("[sip] 设置迁移写库失败: {err}");
         }
-        println!("[sip] 设置已迁移到 v2（全屏提醒底色提亮）");
+        crate::logln!("[sip] 设置已迁移到 v2（全屏提醒底色提亮）");
     }
     e.reload_tasks(&db);
     e.ended_by_restart = stale;
@@ -366,7 +366,7 @@ pub fn boot(app: &AppHandle) {
     }
     e.records = db.today_records(40);
     drop(e);
-    println!(
+    crate::logln!(
         "[sip] 诊断 locked={} whitelist_hit={}",
         platform::screen_locked(),
         platform::in_whitelist(&db.settings().whitelist)
@@ -392,7 +392,7 @@ pub fn start_loop(app: AppHandle) {
         .spawn(move || loop {
             std::thread::sleep(StdDuration::from_millis(1000));
             if let Err(err) = tick(&app) {
-                eprintln!("[scheduler] tick error: {err}");
+                crate::logln!("[scheduler] tick error: {err}");
             }
         })
         .expect("无法启动调度线程");
@@ -452,7 +452,7 @@ fn tick(app: &AppHandle) -> Result<(), String> {
             let limit = e.pending_limit.max(30) as u64;
             let el = at.elapsed().as_secs();
             if !alive || el >= limit {
-                eprintln!(
+                crate::logln!(
                     "[scheduler] pending 回收 pid={pid} reason={} elapsed={el}s limit={limit}s \
                      reminder={rem} toast={tos} labels={:?}",
                     if alive { "超时" } else { "窗口已消失" },
@@ -595,7 +595,7 @@ fn tick(app: &AppHandle) -> Result<(), String> {
 
         let reason_str = e.pause_reason().map(|s| s.to_string());
         if e.last_reason != reason_str {
-            eprintln!(
+            crate::logln!(
                 "[scheduler] 暂停状态 -> {}",
                 reason_str.clone().unwrap_or_else(|| "running".into())
             );
@@ -615,7 +615,7 @@ fn tick(app: &AppHandle) -> Result<(), String> {
     let snapshot = snapshot;
 
     if stale_pending {
-        eprintln!("[scheduler] 提醒窗口已消失，清空 pending 并回收残留窗口");
+        crate::logln!("[scheduler] 提醒窗口已消失，清空 pending 并回收残留窗口");
         windows::destroy_reminders(app);
         windows::destroy_toasts(app);
     }
@@ -633,7 +633,7 @@ fn tick(app: &AppHandle) -> Result<(), String> {
     for item in to_show {
         let task = &item.task;
         let payload = build_payload(app, task);
-        eprintln!(
+        crate::logln!(
             "[scheduler] 弹出提醒 {} type={} style={}",
             task.id, task.task_type, payload.style
         );
@@ -645,14 +645,14 @@ fn tick(app: &AppHandle) -> Result<(), String> {
                 // 否则会把后续提醒全压住
                 shown = windows::has_reminder(app);
                 if !shown {
-                    eprintln!("[scheduler] 全屏窗未创建成功，不登记 pending");
+                    crate::logln!("[scheduler] 全屏窗未创建成功，不登记 pending");
                 }
             }
             STYLE_TOAST => {
                 windows::show_toast(app, &task.id, &payload.toast_pos);
                 shown = windows::has_toast(app);
                 if !shown {
-                    eprintln!("[scheduler] 消息窗未创建成功，不登记 pending");
+                    crate::logln!("[scheduler] 消息窗未创建成功，不登记 pending");
                 }
             }
             _ => {
@@ -879,7 +879,7 @@ pub fn extend_session(app: &AppHandle, minutes: i64) -> Snapshot {
 /// 走到这里基本就是磁盘/权限级别的真错误了。
 fn record(db: &Db, task: &Task, action: &str, value: f64) {
     if let Err(e) = db.insert_record(task, action, value) {
-        eprintln!(
+        crate::logln!(
             "[scheduler] 写入记录失败 task={} action={action} value={value} err={e}",
             task.id
         );

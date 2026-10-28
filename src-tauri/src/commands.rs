@@ -102,6 +102,7 @@ pub fn snooze(app: AppHandle, task_id: String, minutes: Option<i64>) -> Snapshot
 /// 预览提醒（不动计时、不写记录）。style 为空则用该类型的默认形态
 #[tauri::command]
 pub fn preview_reminder(app: AppHandle, task_type: String, style: Option<String>) {
+    crate::logln!("[cmd] preview_reminder 进入 type={task_type} style={style:?}");
     let db = app.state::<Db>();
     let task = db
         .load_tasks()
@@ -123,11 +124,27 @@ pub fn preview_reminder(app: AppHandle, task_type: String, style: Option<String>
         let mut e = ENGINE.lock();
         e.preview = Some(payload.clone());
     }
-    match payload.style.as_str() {
-        STYLE_TOAST => windows::show_preview_toast(&app, &payload.toast_pos),
-        STYLE_SYSTEM => crate::notify::send(&app, &payload),
-        _ => windows::show_preview_fullscreen(&app),
-    }
+    crate::logln!(
+        "[cmd] preview payload 就绪 style={} auto={} bg={}",
+        payload.style,
+        payload.auto_close_sec,
+        payload.bg_preset
+    );
+
+    // 建窗一律甩到独立线程：同步 command 跑在主线程上，而 WebView2 的
+    // url()/show() 是同步 COM 调用，需要主线程自己的消息循环来应答 ——
+    // 主线程正卡在这里等它，就成了自死锁：窗口只剩一块 background_color
+    // 的纯色板，页面永远不加载（用户看到的就是「黑屏 + 点哪都没反应」）。
+    let bg = payload.bg_preset.clone();
+    std::thread::spawn(move || {
+        match payload.style.as_str() {
+            STYLE_TOAST => windows::show_preview_toast(&app, &payload.toast_pos),
+            STYLE_SYSTEM => crate::notify::send(&app, &payload),
+            _ => windows::show_preview_fullscreen(&app),
+        }
+        crate::logln!("[cmd] 预览建窗完成 style={} bg={bg}", payload.style);
+    });
+    crate::logln!("[cmd] preview_reminder 返回");
 }
 
 #[tauri::command]
@@ -293,7 +310,7 @@ pub fn sync_language(app: AppHandle, lang: String) -> Result<(), String> {
 /// 前端诊断日志：提醒窗/消息窗到底有没有渲染出来，直接看后台日志即可
 #[tauri::command]
 pub fn diag(msg: String) {
-    eprintln!("[ui] {msg}");
+    crate::logln!("[ui] {msg}");
 }
 
 #[tauri::command]

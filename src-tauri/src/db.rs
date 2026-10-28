@@ -51,7 +51,7 @@ fn migrate_from_legacy(new_dir: &Path) {
         return;
     }
     if let Err(e) = std::fs::copy(&old_db, new_dir.join("sip.db")) {
-        eprintln!("[sip] 旧数据迁移失败（改用空库）：{e}");
+        crate::logln!("[sip] 旧数据迁移失败（改用空库）：{e}");
         return;
     }
     // WAL 尾部一起带过来，避免丢掉最后一次写入。
@@ -73,7 +73,7 @@ fn migrate_from_legacy(new_dir: &Path) {
             }
         }
     }
-    println!("[sip] 已从旧版本目录迁移数据：{}", legacy.display());
+    crate::logln!("[sip] 已从旧版本目录迁移数据：{}", legacy.display());
     mark_done(new_dir);
 }
 

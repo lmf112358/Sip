@@ -15,7 +15,7 @@ pub fn send(app: &AppHandle, p: &RemindPayload) {
         .body(body)
         .show()
     {
-        eprintln!("[notify] 发送失败: {e}");
+        crate::logln!("[notify] 发送失败: {e}");
     }
 }
 
@@ -28,6 +28,6 @@ pub fn send_text(app: &AppHandle, title: &str, body: &str) {
         .body(body)
         .show()
     {
-        eprintln!("[notify] 发送失败: {e}");
+        crate::logln!("[notify] 发送失败: {e}");
     }
 }

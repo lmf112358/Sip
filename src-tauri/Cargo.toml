@@ -1,6 +1,6 @@
 [package]
 name = "sip"
-version = "1.4.4"
+version = "1.4.5"
 description = "小满 Sip - 喝水 / 眼保健操 / 提肛 / 摸鱼 多任务定时提醒"
 authors = ["Li Mingfeng"]
 edition = "2021"

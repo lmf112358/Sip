@@ -128,5 +128,5 @@ pub fn fatal_dialog(msg: &str) {
 
 #[cfg(not(windows))]
 pub fn fatal_dialog(msg: &str) {
-    eprintln!("[sip] {msg}");
+    crate::logln!("[sip] {msg}");
 }

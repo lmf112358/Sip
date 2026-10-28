@@ -78,14 +78,22 @@ fn watch_load(win: tauri::WebviewWindow, label: String) {
         return; // dev 走 http://localhost:1420，是正常的
     }
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(2500));
-        let url = win.url().map(|u| u.to_string()).unwrap_or_default();
-        let loaded = url.contains("tauri.localhost") || url.contains("asset.localhost");
-        eprintln!("[window] {label} 2.5s 后 url={url} loaded={loaded}");
-        if !loaded {
-            eprintln!("[window] {label} 页面未加载（白屏），销毁窗口以免占屏阻塞后续提醒");
-            let _ = win.destroy();
+        // 分几次探：WebView2 冷启动（第一次创建用户数据目录）能慢到 4-5 秒，
+        // 原来固定 2.5 秒就判死，好机器上没事，慢机器/杀软环境下会把正常
+        // 窗口误杀成「闪一下就没了」。这里最多等 7.5 秒，一旦加载好立刻收工。
+        let mut waited = 0u64;
+        for step in [1500u64, 2000, 4000] {
+            std::thread::sleep(std::time::Duration::from_millis(step));
+            waited += step;
+            let url = win.url().map(|u| u.to_string()).unwrap_or_default();
+            let loaded = url.contains("tauri.localhost") || url.contains("asset.localhost");
+            crate::logln!("[window] {label} {waited}ms 后 url={url} loaded={loaded}");
+            if loaded {
+                return;
+            }
         }
+        crate::logln!("[window] {label} 7.5s 仍未加载（白屏），销毁窗口以免占屏阻塞后续提醒");
+        let _ = win.destroy();
     });
 }
 
@@ -101,7 +109,7 @@ pub fn show_reminder_all(app: &AppHandle, task_id: &str) {
     let monitors = match app.available_monitors() {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("[window] 枚举显示器失败: {e}");
+            crate::logln!("[window] 枚举显示器失败: {e}");
             return;
         }
     };
@@ -147,7 +155,7 @@ pub fn show_reminder_all(app: &AppHandle, task_id: &str) {
                     .url()
                     .map(|u| u.to_string())
                     .unwrap_or_else(|_| "<unknown>".into());
-                eprintln!(
+                crate::logln!(
                     "[window] 全屏提醒已显示 {label} task={task_id} 用时{}ms url={shown_url}",
                     t0.elapsed().as_millis()
                 );
@@ -161,13 +169,13 @@ pub fn show_reminder_all(app: &AppHandle, task_id: &str) {
                     let u = probe.url().map(|x| x.to_string()).unwrap_or_default();
                     let t = probe.title().unwrap_or_default();
                     let vis = probe.is_visible().unwrap_or(false);
-                    eprintln!(
+                    crate::logln!(
                         "[window] 提醒窗 {probe_label} 1.5s 后 url={u} title=[{t}] visible={vis}"
                     );
                 });
                 watch_load(win.clone(), label);
             }
-            Err(e) => eprintln!("[window] 创建提醒窗口 {label} 失败: {e}"),
+            Err(e) => crate::logln!("[window] 创建提醒窗口 {label} 失败: {e}"),
         }
     }
 }
@@ -207,10 +215,10 @@ pub fn show_preview_fullscreen(app: &AppHandle) {
                 let _ = win.set_always_on_top(true);
                 let _ = win.show();
                 let u = win.url().map(|x| x.to_string()).unwrap_or_default();
-                eprintln!("[window] 预览窗已显示 {label} url={u}");
+                crate::logln!("[window] 预览窗已显示 {label} url={u}");
                 watch_load(win.clone(), label.clone());
             }
-            Err(e) => eprintln!("[window] 创建预览窗口 {label} 失败: {e}"),
+            Err(e) => crate::logln!("[window] 创建预览窗口 {label} 失败: {e}"),
         }
     }
 }
@@ -265,10 +273,10 @@ fn build_toast(app: &AppHandle, url: &str, label: &str, pos: &str) {
         Ok(win) => {
             let _ = win.set_always_on_top(true);
             let _ = win.show();
-            eprintln!("[window] 消息窗已显示 {label} {url}");
+            crate::logln!("[window] 消息窗已显示 {label} {url}");
             watch_load(win.clone(), label.to_string());
         }
-        Err(e) => eprintln!("[window] 创建消息窗 {label} 失败: {e}"),
+        Err(e) => crate::logln!("[window] 创建消息窗 {label} 失败: {e}"),
     }
 }
 
