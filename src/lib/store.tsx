@@ -32,27 +32,27 @@ export const DEFAULT_SETTINGS: Settings = {
     water: {
       style: "fullscreen", templateId: "fs-water", durationSec: 20, toastSkin: "toast-chat",
       toastPos: "br", sound: "default", volume: 0.6, bgImage: "", bgPreset: "water",
-      dim: 0.55, blur: 0, showCountdown: true, senderName: "", messageText: "",
+      dim: 0.30, blur: 0, showCountdown: true, senderName: "", messageText: "",
     },
     eyes: {
       style: "fullscreen", templateId: "fs-eyes", durationSec: 0, toastSkin: "toast-chat",
       toastPos: "br", sound: "default", volume: 0.6, bgImage: "", bgPreset: "mint",
-      dim: 0.72, blur: 0, showCountdown: true, senderName: "", messageText: "",
+      dim: 0.45, blur: 0, showCountdown: true, senderName: "", messageText: "",
     },
     kegel: {
       style: "toast", templateId: "toast-chat", durationSec: 12, toastSkin: "toast-chat",
       toastPos: "br", sound: "none", volume: 0.6, bgImage: "", bgPreset: "dusk",
-      dim: 0.55, blur: 0, showCountdown: true, senderName: "", messageText: "",
+      dim: 0.30, blur: 0, showCountdown: true, senderName: "", messageText: "",
     },
     break: {
       style: "toast", templateId: "toast-minimal", durationSec: 15, toastSkin: "toast-minimal",
       toastPos: "br", sound: "default", volume: 0.6, bgImage: "", bgPreset: "amber",
-      dim: 0.55, blur: 0, showCountdown: true, senderName: "", messageText: "",
+      dim: 0.30, blur: 0, showCountdown: true, senderName: "", messageText: "",
     },
     custom: {
       style: "toast", templateId: "toast-minimal", durationSec: 15, toastSkin: "toast-minimal",
       toastPos: "br", sound: "default", volume: 0.6, bgImage: "", bgPreset: "night",
-      dim: 0.55, blur: 0, showCountdown: true, senderName: "", messageText: "",
+      dim: 0.30, blur: 0, showCountdown: true, senderName: "", messageText: "",
     },
   },
 };

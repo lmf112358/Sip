@@ -116,7 +116,9 @@ pub fn preview_reminder(app: AppHandle, task_type: String, style: Option<String>
         }
     }
     payload.preview = true;
-    payload.auto_close_sec = if payload.style == STYLE_SYSTEM { 3 } else { 5 };
+    // 预览停留时间：原来是 5 秒，WebView2 首次冷启动时还没画完就关了，
+    // 用户看到的只是一个全屏黑窗。给到 8 秒。
+    payload.auto_close_sec = if payload.style == STYLE_SYSTEM { 3 } else { 8 };
     {
         let mut e = ENGINE.lock();
         e.preview = Some(payload.clone());

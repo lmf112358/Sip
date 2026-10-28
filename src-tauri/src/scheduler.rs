@@ -342,6 +342,22 @@ pub fn boot(app: &AppHandle) {
     let stale = db.close_stale_sessions();
     let mut e = ENGINE.lock();
     e.settings = db.settings();
+    // v1 → v2：全屏提醒底色整体提亮，压黑比例从 0.55/0.72 降到 0.30/0.45。
+    // 只迁移「还停在上一个默认值」的配置 —— 用户自己拖过滑杆的一律不动。
+    if e.settings.v < 2 {
+        for p in e.settings.reminder.values_mut() {
+            if (p.dim - 0.55).abs() < 1e-6 {
+                p.dim = 0.30;
+            } else if (p.dim - 0.72).abs() < 1e-6 {
+                p.dim = 0.45;
+            }
+        }
+        e.settings.v = 2;
+        if let Err(err) = db.save_settings(&e.settings) {
+            eprintln!("[sip] 设置迁移写库失败: {err}");
+        }
+        println!("[sip] 设置已迁移到 v2（全屏提醒底色提亮）");
+    }
     e.reload_tasks(&db);
     e.ended_by_restart = stale;
     let now = Local::now();

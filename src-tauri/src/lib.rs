@@ -296,6 +296,17 @@ pub fn run() {
                 .unwrap_or(false);
             eprintln!("[sip] 主窗口 visible={main_visible} silent={silent}");
 
+            // 测试钩子：SIP_PREVIEW=water 启动 4 秒后自动播一次预览，用于排查「预览黑屏」
+            if let Ok(kind) = std::env::var("SIP_PREVIEW") {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    eprintln!("[sip] 测试钩子触发预览 kind={kind}");
+                    commands::preview_reminder(h, kind, None);
+                    // 预览窗一般 5 秒后自关，这里把退出也往后推，方便抓屏
+                });
+            }
+
             // 测试钩子：SIP_QUIT_AFTER_SEC=5 时 5 秒后走正常退出流程（用来验证「退出到底退不退得掉」）
             if let Ok(v) = std::env::var("SIP_QUIT_AFTER_SEC") {
                 if let Ok(sec) = v.parse::<u64>() {

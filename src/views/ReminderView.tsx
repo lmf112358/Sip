@@ -15,14 +15,17 @@ const qs = new URLSearchParams(location.search);
 const paramTask = qs.get("task") ?? "";
 const isPreview = qs.get("preview") === "1";
 
+// 底色预设。注意别再用「接近纯黑」的值：全屏铺满 1920×1200 时，
+// 中心色低于 #10304a 的渐变 + 55% 黑罩，实测 99% 的像素亮度 < 30/255，
+// 用户第一反应就是「黑屏 / 没加载出来」。
 export const BG_GRADIENT: Record<string, string> = {
-  dawn: "radial-gradient(circle at 30% 18%, #123a5a 0%, #0a1b2c 55%, #05090e 100%)",
-  mint: "radial-gradient(circle at 30% 18%, #0b3a2f 0%, #061d18 55%, #040b09 100%)",
-  dusk: "radial-gradient(circle at 30% 18%, #2b1d4a 0%, #150e26 55%, #08050f 100%)",
-  amber: "radial-gradient(circle at 30% 18%, #3a2a0d 0%, #1c1408 55%, #0b0804 100%)",
-  night: "radial-gradient(circle at 30% 18%, #141b24 0%, #0b0f14 60%, #05080b 100%)",
+  dawn: "radial-gradient(circle at 30% 18%, #1f6a9e 0%, #102a42 55%, #0a1119 100%)",
+  mint: "radial-gradient(circle at 30% 18%, #16705c 0%, #0d3428 55%, #08130f 100%)",
+  dusk: "radial-gradient(circle at 30% 18%, #4b3579 0%, #241a3d 55%, #0e0a18 100%)",
+  amber: "radial-gradient(circle at 30% 18%, #6b4f1a 0%, #33250c 55%, #14100a 100%)",
+  night: "radial-gradient(circle at 30% 18%, #26313f 0%, #131a22 60%, #0b1117 100%)",
   paper: "radial-gradient(circle at 30% 18%, #eef2f7 0%, #d7dfe9 60%, #b9c6d6 100%)",
-  water: "radial-gradient(circle at 30% 18%, #0b3350 0%, #061c2c 55%, #04090e 100%)",
+  water: "radial-gradient(circle at 30% 18%, #1a5c8a 0%, #0e2c44 55%, #08131c 100%)",
 };
 
 export function ReminderView() {
@@ -64,7 +67,18 @@ export function ReminderView() {
   // 预览模式：内容来自 engine 里的 preview payload
   useEffect(() => {
     if (!isPreview) return;
-    api.getPreviewPayload().then((p) => setPayload(p ?? null));
+    api
+      .getPreviewPayload()
+      .then((p) => {
+        void api.diag(
+          `reminder preview payload ${p ? `${p.type}/${p.style}` : "null"} bg=${p?.bgPreset ?? "-"} img=${p?.bgImage ?? "-"}`
+        );
+        setPayload(p ?? null);
+      })
+      .catch((e) => {
+        void api.diag(`reminder preview payload error ${String(e)}`);
+        setPayload(null);
+      });
   }, []);
 
   useEffect(() => {

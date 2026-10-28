@@ -5,8 +5,8 @@ const TOAST_W: f64 = 404.0;
 const TOAST_H: f64 = 152.0;
 const GAP: f64 = 20.0;
 const TASKBAR: f64 = 56.0;
-/// 全屏提醒窗底色：与渐变最暗处接近，避免白闪
-const REMINDER_BG: Color = Color(8, 11, 16, 255);
+/// 全屏提醒窗底色：与渐变中段接近，避免加载期黑屏（原来是 (8,11,16)，整屏发黑）
+const REMINDER_BG: Color = Color(14, 36, 54, 255);
 
 fn monitor_metrics(m: &tauri::Monitor) -> (f64, f64, f64, f64) {
     let sf = m.scale_factor();
@@ -206,6 +206,9 @@ pub fn show_preview_fullscreen(app: &AppHandle) {
             Ok(win) => {
                 let _ = win.set_always_on_top(true);
                 let _ = win.show();
+                let u = win.url().map(|x| x.to_string()).unwrap_or_default();
+                eprintln!("[window] 预览窗已显示 {label} url={u}");
+                watch_load(win.clone(), label.clone());
             }
             Err(e) => eprintln!("[window] 创建预览窗口 {label} 失败: {e}"),
         }

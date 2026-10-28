@@ -36,7 +36,7 @@ export function ReminderSettingsPage() {
     volume: 0.6,
     bgImage: "",
     bgPreset: "dawn",
-    dim: 0.55,
+    dim: 0.30,
     blur: 0,
     showCountdown: true,
     senderName: "",

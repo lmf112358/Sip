@@ -272,7 +272,7 @@ impl Default for RemindProfile {
             volume: 0.6,
             bg_image: String::new(),
             bg_preset: "dawn".into(),
-            dim: 0.55,
+            dim: 0.30,
             blur: 0.0,
             show_countdown: true,
             sender_name: String::new(),
@@ -296,7 +296,7 @@ impl RemindProfile {
                 p.template_id = "fs-eyes".into();
                 p.bg_preset = "mint".into();
                 p.duration_sec = 0;
-                p.dim = 0.72;
+                p.dim = 0.45;
             }
             T_KEGEL => {
                 p.style = STYLE_TOAST.into();
@@ -359,6 +359,13 @@ pub struct Settings {
     /// 按任务类型的提醒默认值
     #[serde(default = "default_reminders")]
     pub reminder: HashMap<String, RemindProfile>,
+    /// 设置结构版本，用于一次性迁移（v2 起提亮了全屏提醒底色、降低了压黑比例）
+    #[serde(default = "default_settings_v")]
+    pub v: u32,
+}
+
+fn default_settings_v() -> u32 {
+    1
 }
 
 impl Default for Settings {
@@ -386,6 +393,7 @@ impl Default for Settings {
             weight_kg: 65.0,
             fullscreen_image: None,
             reminder: default_reminders(),
+            v: 2,
         }
     }
 }

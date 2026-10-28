@@ -1,7 +1,7 @@
 # 小满 · Sip
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.4.3-2ea44f">
+  <img alt="version" src="https://img.shields.io/badge/version-1.4.4-2ea44f">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20%C2%B7%20macOS%2012%2B-blue">
   <img alt="tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB">
   <img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-green">
@@ -92,8 +92,8 @@ Windows 10/11 x64 —— 到 [Releases](https://github.com/lmf112358/Sip/release
 
 | 文件 | 说明 |
 | --- | --- |
-| `Sip_1.4.3_x64-setup.exe` | 安装版（推荐），覆盖安装会保留数据 |
-| `Sip_1.4.3_x64_en-US.msi` | MSI 安装包，适合企业分发 / 静默安装 |
+| `Sip_1.4.4_x64-setup.exe` | 安装版（推荐），覆盖安装会保留数据 |
+| `Sip_1.4.4_x64_en-US.msi` | MSI 安装包，适合企业分发 / 静默安装 |
 
 数据保存在 `%APPDATA%\com.sip.desktop`，卸载重装不会丢。
 
@@ -133,6 +133,14 @@ npm run tauri build
 | `Ctrl/Cmd + Shift + X` | 强制关闭当前提醒（逃生键，任何时候都能用） |
 | `Esc` / `Enter` | 全屏提醒中关闭 / 确认完成 |
 | 鼠标左键 | 全屏提醒中点击任意位置关闭 |
+
+## 已修复的问题（v1.4.4）
+
+| 症状 | 根因 | 修法 |
+| --- | --- | --- |
+| **点「预览提醒」是一片黑屏，以为程序坏了** | 全屏提醒底色本来就极暗（渐变中心 `#0b3350`，边缘 `#04090e`），再压一层 `dim=0.55` 的黑罩。实测 1920×1200 下**99% 的像素亮度 < 30/255**，中位亮度 12，肉眼就是纯黑 | 7 套底色渐变整体提亮约一倍；`dim` 默认值 0.55→0.30（眼睛 0.72→0.45）；窗口底色 `(8,11,16)`→`(14,36,54)`。改后中位亮度 12→32，亮度 >30 的像素占比 0.9%→57% |
+| 老用户升级后还是黑的 | `dim` 存在用户设置里，改默认值不影响已存在的配置 | 设置加 `v` 版本号，从 v1 迁到 v2：只把「仍等于旧默认值」的 dim 调低，用户自己拖过滑杆的不动 |
+| 预览一闪就没 | 预览停留 5 秒，WebView2 冷启动时还没画完就关了 | 延长到 8 秒 |
 
 ## 已修复的问题（v1.4.3）
 
