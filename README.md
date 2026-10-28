@@ -86,6 +86,17 @@ npm run dev         # 只跑前端：http://localhost:1420（用 mock 数据，�
 
 前端有一套 mock 层，浏览器里也能跑完整界面（`src/lib/mock.ts`），不依赖 Rust 端。
 
+## 下载安装
+
+Windows 10/11 x64 —— 到 [Releases](https://github.com/lmf112358/Sip/releases/latest) 下载：
+
+| 文件 | 说明 |
+| --- | --- |
+| `Sip_1.4.3_x64-setup.exe` | 安装版（推荐），覆盖安装会保留数据 |
+| `Sip_1.4.3_x64_en-US.msi` | MSI 安装包，适合企业分发 / 静默安装 |
+
+数据保存在 `%APPDATA%\com.sip.desktop`，卸载重装不会丢。
+
 ## 构建
 
 ```bash
