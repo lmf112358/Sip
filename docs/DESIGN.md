@@ -5,7 +5,7 @@
 | 版本 | **v1.2**（新增主题系统 / 中英双语 / SVG 图标规范） |
 | 对应 PRD | `docs/PRD.md` v1.2 |
 | 基线代码 | Shui（Tauri 2 + Next.js 15），本版重写为 **Tauri 2 + Vite + React 19** |
-| 目录 | `Desktop/定时活动/定时everything` |
+| 目录 | `E:/定时活动/定时everything` |
 
 > v1.1 变更：会议模式不新增线程与状态机，而是在既有 `Engine` 上增加一个 **`Session`（免打扰会话）** 维度，`meeting / focus` 共用同一实现；新增 `sessions` 表用于统计会议时长；全屏提醒页支持"持续型任务"的倒计时模式。
 >
